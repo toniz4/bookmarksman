@@ -1,4 +1,5 @@
 #!/bin/sh
+# See LICENSE for license details.
 
 VERSION="0.1"
 bookdir="${XDG_DATA_HOME:-$HOME/.local/share}/bookmarks"
