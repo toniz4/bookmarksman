@@ -1,0 +1,103 @@
+#!/bin/sh
+
+VERSION="0.1"
+bookdir="${XDG_DATA_HOME:-$HOME/.local/share}/bookmarks"
+bookmarks="$bookdir/bookmarks.json"
+tmpbookmarks="$(mktemp)"
+
+die () {
+	exit 1
+}
+
+openbookmark () {
+	selectsection="$(jq -r 'keys[]' "$bookmarks"\
+		| dmenu -w "$winid" -p "Open witch section?")" || die
+
+	selecttitle="$(jq -r ".$selectsection | keys[]" "$bookmarks" |\
+				 dmenu -w "$winid" -p "Select bookmark")" || die
+
+	link="$(jq -r ".${selectsection}.\"${selecttitle}\"" "$bookmarks")"
+
+	[ -n "$link" ] && echo "$link"
+}
+
+deletebookmark() {
+	selectsection="$(jq -r 'keys[]' "$bookmarks"\
+		| dmenu -w "$winid" -p "Open witch section?")" || die
+
+	selecttitle="$(jq -r ".$selectsection | keys[]" "$bookmarks" |\
+				 dmenu -w "$winid" -p "Select bookmark to delete")" || die
+
+	delete=$(printf "Yes\\nNo" | \
+		dmenu -w "$winid" -i -p "Are you sure you want to delete $selecttitle?")
+
+	case "$delete" in
+		Yes) jq "del(.$selectsection.\"$selecttitle\")" "$tmpbookmarks" > "$bookmarks";;
+		*) die;;
+	esac
+	
+	rm "$tmpbookmarks"
+}
+
+substitutebookmark() {
+	substitute=$(printf "Yes\\nNo" | \
+		dmenu -w "$winid" -i -p "There is a bookmark with that name, substitute it?")
+
+	case "$substitute" in
+		Yes) jq "del(.$section.\"$title\")" "$tmpbookmarks" > "$bookmarks";;
+		*) die;;
+	esac
+}
+
+newbookmark() {
+	title="$(printf "" | dmenu -w "$winid" -p "Save bookmas as:")" || die
+	title="$(printf "$title" | sed 's/"//g')"
+
+	section="$(jq -r 'keys[]' "$bookmarks" | dmenu -w "$winid" -p "Witch section?")" || die
+
+	cp -r "$bookmarks" "$tmpbookmarks"
+
+	bookmarkexist="$(jq -r ".${section}.${title}" "$bookmarks")"
+	[ "$bookmarkexist" = "null" ] || [ -z "$bookmarkexist" ]\
+		|| substitutebookmark "$section" "$title"
+
+	jq "."$section" += {\"$title\": \"$url\"}" "$tmpbookmarks" > "$bookmarks"
+
+	rm "$tmpbookmarks"
+}
+
+initbookmarks() {
+	[ -d "$bookdir" ] || mkdir -p "$bookdir"
+	printf "{\n}\n" > "$bookmarks"
+}
+
+help() {
+	cat <<EOF
+usage: bookmarksman [-v] [open] [del] [add [URL]] [XID]
+EOF
+	die
+}
+
+[ -e "$bookmarks" ] || initbookmarks
+
+case "$1" in
+	open)
+		winid="${2:-0x0}"
+		openbookmark
+		;;
+	add)
+		url="$2"
+		winid="${3:-0x0}"
+		newbookmark
+		;;
+	del)
+		winid="${2:-0x0}"
+		deletebookmark
+		;;
+	-v)
+		echo "$VERSION"
+		exit
+		;;
+	*) help 
+		;;
+esac
